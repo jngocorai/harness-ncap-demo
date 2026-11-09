@@ -1,0 +1,38 @@
+service:
+  name: ncap-demo
+  identifier: ncapdemo
+  serviceDefinition:
+    type: Kubernetes
+    spec:
+      manifests:
+        - manifest:
+            identifier: ncap_manifests
+            type: K8sManifest
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: ncapgithub
+                  gitFetchType: Branch
+                  paths:
+                    - k8s/deployment.yaml
+                    - k8s/service.yaml
+                  branch: main
+              valuesPaths:
+                - k8s/values.yaml
+              skipResourceVersioning: false
+              enableDeclarativeRollback: false
+      artifacts:
+        primary:
+          primaryArtifactRef: <+input>
+          sources:
+            - spec:
+                connectorRef: ncapdockerhub
+                imagePath: jngocorai/harness-ncap-demo
+                tag: build-<+pipeline.sequenceId>
+                digest: ""
+              identifier: ncap_image
+              type: DockerRegistry
+  gitOpsEnabled: false
+  orgIdentifier: default
+  projectIdentifier: Johnson

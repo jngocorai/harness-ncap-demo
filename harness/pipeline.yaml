@@ -1,0 +1,181 @@
+pipeline:
+  name: ncap-demo
+  identifier: ncapdemo
+  projectIdentifier: Johnson
+  orgIdentifier: default
+  tags: {}
+  stages:
+    - stage:
+        name: Build_Test_Push
+        identifier: Build_Test_Push
+        description: ""
+        type: CI
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+            override: false
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Run_Tests
+                  identifier: Run_Tests
+                  spec:
+                    shell: Sh
+                    command: |-
+                      set -eu
+
+                      python3 --version
+                      python3 -m venv /tmp/ncap-test-venv
+                      . /tmp/ncap-test-venv/bin/activate
+
+                      python -m pip install -r requirements-test.txt
+                      python -m unittest discover -s tests -v
+                  description: Install dependencies and test the NCAP preview API
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build_Push_Image
+                  identifier: Build_Push_Image
+                  spec:
+                    connectorRef: ncapdockerhub
+                    repo: jngocorai/harness-ncap-demo
+                    tags:
+                      - build-<+pipeline.sequenceId>
+                    caching: true
+                    dockerfile: Dockerfile
+                    context: .
+                    buildArgs:
+                      APP_VERSION: build-<+pipeline.sequenceId>
+                    envVariables:
+                      PLUGIN_BUILDX_OPTIONS: "--platform=linux/arm64"
+                  timeout: 15m
+    - stage:
+        name: Deploy_Canary
+        identifier: Deploy_Canary
+        description: ""
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: ncapdemo
+            failureStrategies:
+              - onFailure:
+                  errors:
+                    - Authentication
+                    - Connectivity
+                    - Authorization
+                    - Timeout
+                    - DelegateProvisioning
+                    - Unknown
+                    - PolicyEvaluationFailure
+                    - Verification
+                    - InputTimeoutError
+                    - ApprovalRejection
+                    - DelegateRestart
+                    - UserMarkedFailure
+                  action:
+                    type: PipelineRollback
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: <+input>
+                      sources: <+input>
+          environment:
+            environmentRef: locallab
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: dockerdesktop
+            failureStrategies:
+              - onFailure:
+                  errors:
+                    - Authentication
+                    - Timeout
+                    - Connectivity
+                    - Authorization
+                    - Verification
+                    - Unknown
+                    - InputTimeoutError
+                    - PolicyEvaluationFailure
+                    - DelegateProvisioning
+                    - ApprovalRejection
+                    - DelegateRestart
+                    - UserMarkedFailure
+                  action:
+                    type: StageRollback
+          execution:
+            steps:
+              - step:
+                  name: Canary Deploy
+                  identifier: Canary_Deploy
+                  type: K8sCanaryDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                    instanceSelection:
+                      type: Count
+                      spec:
+                        count: 1
+              - step:
+                  name: Approve Canary
+                  identifier: Approve_Canary
+                  type: HarnessApproval
+                  timeout: 1h
+                  spec:
+                    approvalMessage: Verify canary health and version before promotion.
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                      userGroups: <+input>
+                    approverInputs: []
+              - step:
+                  name: Canary Delete
+                  identifier: Canary_Delete
+                  type: K8sCanaryDelete
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  name: Rollout Deployment
+                  identifier: rolloutDeployment
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+            rollbackSteps:
+              - step:
+                  name: Delete Canary on Failure
+                  identifier: Delete_Canary_On_Failure
+                  type: K8sCanaryDelete
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  name: Rollback Rollout Deployment
+                  identifier: rollbackRolloutDeployment
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec:
+                    pruningEnabled: false
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+  properties:
+    ci:
+      codebase:
+        connectorRef: ncapgithub
+        build: <+input>
+

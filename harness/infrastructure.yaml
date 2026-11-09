@@ -1,0 +1,14 @@
+infrastructureDefinition:
+  name: docker-desktop
+  identifier: dockerdesktop
+  orgIdentifier: default
+  projectIdentifier: Johnson
+  environmentRef: locallab
+  deploymentType: Kubernetes
+  type: KubernetesDirect
+  spec:
+    connectorRef: localk8s
+    namespace: ncap-demo
+    releaseName: release-<+INFRA_KEY_SHORT_ID>
+  allowSimultaneousDeployments: false
+
