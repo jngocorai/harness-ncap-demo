@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ncap-demo
+spec:
+  selector:
+    app: ncap-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP
+
