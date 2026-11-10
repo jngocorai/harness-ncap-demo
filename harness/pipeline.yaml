@@ -40,6 +40,23 @@ pipeline:
                       python -m unittest discover -s tests -v
                   description: Install dependencies and test the NCAP preview API
               - step:
+                  type: Run
+                  name: Security_Scan_Bandit
+                  identifier: Security_Scan_Bandit
+                  spec:
+                    shell: Sh
+                    command: |-
+                      set -eu
+
+                      python3 -m venv /tmp/ncap-bandit-venv
+                      . /tmp/ncap-bandit-venv/bin/activate
+
+                      python -m pip install bandit==1.9.4
+                      bandit --version
+
+                      bandit -r app -ll -ii
+                contextType: Pipeline
+              - step:
                   type: BuildAndPushDockerRegistry
                   name: Build_Push_Image
                   identifier: Build_Push_Image
